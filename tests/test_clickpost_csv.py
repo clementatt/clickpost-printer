@@ -28,7 +28,7 @@ def ok_row(**over):
 class TestHelpers(unittest.TestCase):
     def test_display_width(self):
         self.assertEqual(display_width("SIMカード"), 3 + 6)  # 3 half + 3 full
-        self.assertEqual(display_width("株式会社サンプル商事"), 12)
+        self.assertEqual(display_width("株式会社サンプル商事"), 20)
         self.assertEqual(display_width("abc"), 3)
 
     def test_normalize_zip(self):

@@ -109,9 +109,9 @@ def _make_job(args, box: LabelBox, index: int) -> Job:
     return Job(index, box, canvas, gray, bilevel, stream)
 
 
-def _jobs(args) -> tuple[list[Job], list[LabelBox], list[str]]:
+def _jobs(args, *, force_all: bool = False) -> tuple[list[Job], list[LabelBox], list[str]]:
     boxes, notes, _ = _label_boxes(args)
-    if args.labels == "all":
+    if force_all or args.labels == "all":
         chosen = list(enumerate(boxes))
     else:
         if not 0 <= args.index < len(boxes):
@@ -163,7 +163,8 @@ def _write_outputs(jobs: list[Job], args) -> None:
 
 
 def cmd_info(args) -> int:
-    jobs, boxes, notes = _jobs(args)
+    # `info` is read-only: always report every label it found
+    jobs, boxes, notes = _jobs(args, force_all=True)
     if args.verbose:
         for line in notes:
             print(f"  {line}", file=sys.stderr)

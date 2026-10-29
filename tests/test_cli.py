@@ -100,6 +100,7 @@ class TestMultiLabelCli(unittest.TestCase):
         code, out, _ = run(["info", str(self.sheet)])
         self.assertEqual(code, 0)
         self.assertIn("detected 4 label(s)", out)
+        self.assertIn("label #4", out)  # info lists every detected label
 
     def test_dry_run_writes_one_stream_per_label(self):
         dry = self.dir / "batch.bin"
