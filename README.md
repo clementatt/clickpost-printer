@@ -1,5 +1,8 @@
 # clickpost-printer
 
+[![ci](https://github.com/clementatt/clickpost-printer/actions/workflows/ci.yml/badge.svg)](https://github.com/clementatt/clickpost-printer/actions/workflows/ci.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **クリックポスト**（日本郵便）のラベル PDF から A6 の運単を切り出し、**DeTong DP305P** 系の
 サーマルラベルプリンタ（76 × 130 mm）で直接印刷するツールです。
 公式アプリもクラウドサービスも経由しません — プリンタの BLE / USB プロトコルを直接叩きます。
@@ -57,7 +60,10 @@ npm run dev        # http://localhost:5173
 ```
 
 ブラウザで PDF をドロップ（または「サンプルで試す」）→ 検出されたラベルを確認 →
-「プリンタに接続」→「印刷する」。**Chrome / Edge のデスクトップ版**が必要です
+「プリンタに接続」→「印刷する」。
+
+![Web 版の画面: 4 面シートを検出したところ](docs/screenshot-web.png)
+**Chrome / Edge のデスクトップ版**が必要です
 （Web Bluetooth は Safari / Firefox 非対応）。
 
 > Web Bluetooth はユーザー操作からしか接続できません。また、プリンタは同時に 1 台の
