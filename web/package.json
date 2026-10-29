@@ -14,6 +14,7 @@
     "verify:pdf": "node tools/verify-pdf.mjs"
   },
   "dependencies": {
+    "@zxing/library": "^0.23.0",
     "pdfjs-dist": "^4.10.38"
   },
   "devDependencies": {

@@ -3,6 +3,8 @@
 [![ci](https://github.com/clementatt/clickpost-printer/actions/workflows/ci.yml/badge.svg)](https://github.com/clementatt/clickpost-printer/actions/workflows/ci.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+[简体中文](README.zh-CN.md) ・ **[在线 DEMO](https://clickpost.l-l.li/)**（サンプルサイト / no data leaves the browser）
+
 **クリックポスト**（日本郵便）のラベル PDF から A6 の運単を切り出し、**DeTong DP305P** 系の
 サーマルラベルプリンタ（76 × 130 mm）で直接印刷するツールです。
 公式アプリもクラウドサービスも経由しません — プリンタの BLE / USB プロトコルを直接叩きます。
@@ -59,8 +61,12 @@ npm install
 npm run dev        # http://localhost:5173
 ```
 
+**オンライン DEMO: <https://clickpost.l-l.li/>** — サーバーに何も送らないデモサイトです
+（PDF はブラウザ内で処理、印刷だけがローカルの BLE プリンタへ）。
+
 ブラウザで PDF をドロップ（または「サンプルで試す」）→ 検出されたラベルを確認 →
-「プリンタに接続」→「印刷する」。
+「プリンタに接続」→「印刷する」。印刷後は**印刷ログ（CSV / JSON）**を書き出せます
+（日時・ファイル・ページ・通し番号・追跡番号・サイズ・バイト数・sha256・状態）。
 
 ![Web 版の画面: 4 面シートを検出したところ](docs/screenshot-web.png)
 **Chrome / Edge のデスクトップ版**が必要です

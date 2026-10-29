@@ -4,6 +4,14 @@ import { Printer, isSupported } from "./ble.ts";
 import { analyseDocument, autoOffset, composeOnHead, openPdf, renderLabel } from "./pdfdoc.ts";
 import { buildStream, DPI, PRINT_HEAD_DOTS, type Bitmap } from "./protocol.ts";
 import type { Box } from "./detect.ts";
+import {
+  guessTracking,
+  nowStamp,
+  sha256Short,
+  toCsv,
+  toJson,
+  type PrintLogEntry,
+} from "./printlog.ts";
 import type { PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist";
 
 const LABEL_W_MM = 76;
@@ -31,7 +39,9 @@ const state: {
   jobs: LabelJob[];
   printer: Printer;
   busy: boolean;
-} = { jobs: [], printer: new Printer(), busy: false };
+  fileName: string;
+  log: PrintLogEntry[];
+} = { jobs: [], printer: new Printer(), busy: false, fileName: "", log: [] };
 
 function log(message: string, kind: "info" | "error" | "ok" = "info"): void {
   const line = document.createElement("div");
@@ -72,6 +82,7 @@ async function onFile(file: File): Promise<void> {
   setBusy(true);
   $(".log").replaceChildren();
   try {
+    state.fileName = file.name;
     log(`読み込み: ${file.name}`);
     const data = await file.arrayBuffer();
     state.doc = await openPdf(data);
@@ -146,6 +157,30 @@ async function onFile(file: File): Promise<void> {
   }
 }
 
+function updateLogButtons(): void {
+  const enabled = state.log.length > 0;
+  ($("#log-csv") as HTMLButtonElement).disabled = !enabled;
+  ($("#log-json") as HTMLButtonElement).disabled = !enabled;
+}
+
+function downloadLog(kind: "csv" | "json"): void {
+  if (!state.log.length) return;
+  const stamp = nowStamp().replace(/[:+]/g, "-").slice(0, 15);
+  const name = `print-log-${stamp}.${kind}`;
+  const text = kind === "csv" ? toCsv(state.log) : toJson(state.log);
+  // BOM so Excel opens the Shift-JIS-free UTF-8 CSV correctly on Windows
+  const body = kind === "csv" ? `\ufeff${text}` : text;
+  const blob = new Blob([body], {
+    type: kind === "csv" ? "text/csv;charset=utf-8" : "application/json",
+  });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  log(`ログを書き出しました: ${name} (${state.log.length} 件)`, "ok");
+}
+
 function updatePrintCount(): void {
   const n = state.jobs.filter((j) => j.selected).length;
   const btn = $("#print");
@@ -194,7 +229,22 @@ async function printSelected(): Promise<void> {
         bar.value = sent;
       });
       const status = await state.printer.query(0x70);
-      log(`${label}: ${state.printer.describeStatus(status)}`,
+      const statusText = state.printer.describeStatus(status);
+      const tracking = guessTracking(state.fileName);
+      state.log.push({
+        at: nowStamp(),
+        file: state.fileName,
+        page: job.pageIndex + 1,
+        label: job.indexOnPage + 1,
+        tracking,
+        widthMm: (job.box.x1 - job.box.x0) * 25.4 / 72,
+        heightMm: (job.box.y1 - job.box.y0) * 25.4 / 72,
+        bytes: stream.length,
+        sha256: await sha256Short(stream),
+        status: statusText,
+      });
+      updateLogButtons();
+      log(`${label}: ${statusText} 追跡: ${tracking ?? "—"}`,
           status && status[3] === 0 ? "ok" : "info");
       if (i < jobs.length - 1) await new Promise((r) => setTimeout(r, 1500));
     }
@@ -297,6 +347,8 @@ function wire(): void {
   $("#connect").addEventListener("click", () => void connect());
   $("#print").addEventListener("click", () => void printSelected());
   $("#download").addEventListener("click", () => void downloadStream());
+  $("#log-csv").addEventListener("click", () => downloadLog("csv"));
+  $("#log-json").addEventListener("click", () => downloadLog("json"));
 
   if (!isSupported()) {
     $(".banner").hidden = false;

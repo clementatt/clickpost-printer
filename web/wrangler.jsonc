@@ -1,10 +1,12 @@
 {
-  // Deploy the browser app as a static site on Cloudflare Workers.
-  //   cd web && npm run build && npx wrangler deploy
+  // Static hosting for the browser app. Everything (PDF parsing, rasterising,
+  // BLE) happens in the visitor's browser; Cloudflare only serves these files.
+  //   npm run build && npx wrangler deploy
   "name": "clickpost-printer",
   "compatibility_date": "2026-01-01",
   "assets": {
     "directory": "./dist",
     "not_found_handling": "single-page-application",
   },
+  "routes": [{ "pattern": "clickpost.l-l.li", "custom_domain": true }],
 }
