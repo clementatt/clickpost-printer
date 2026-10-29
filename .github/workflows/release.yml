@@ -1,0 +1,49 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  id-token: write # PyPI trusted publishing
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: pypi
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build the CLI distribution
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+          ls -l dist
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Build the browser app
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+          cd dist && zip -qr "../../web-dist.zip" .
+
+      - name: Attach artifacts to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            dist/*.whl dist/*.tar.gz web-dist.zip \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes || \
+          gh release upload "${GITHUB_REF_NAME}" dist/*.whl dist/*.tar.gz web-dist.zip --clobber
+
+      - name: Publish to PyPI (trusted publishing)
+        continue-on-error: true
+        uses: pypa/gh-action-pypi-publish@release/v1

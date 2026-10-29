@@ -3,6 +3,7 @@
 import { chromium } from "playwright";
 
 const url = process.argv[2] ?? "http://127.0.0.1:4173/";
+const pdfPath = process.argv[3]; // optional: real sheet to load through the file input
 const browser = await chromium.launch({ channel: "chrome", headless: true });
 const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
 
@@ -18,7 +19,11 @@ page.on("pageerror", (e) => errors.push(String(e)));
 await page.goto(url, { waitUntil: "networkidle" });
 console.log("title:", await page.title());
 
-await page.click("#sample");
+if (pdfPath) {
+  await page.setInputFiles("#file", pdfPath);
+} else {
+  await page.click("#sample");
+}
 await page.waitForSelector(".card", { timeout: 30000 });
 await page.waitForFunction(() => document.querySelectorAll(".card canvas").length >= 4, null, { timeout: 30000 });
 

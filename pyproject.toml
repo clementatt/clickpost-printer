@@ -3,13 +3,24 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dzpost"
+name = "clickpost-printer"
 version = "0.1.0"
 description = "Print Japan Post ClickPost labels on a DeTong DP-series label printer"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "dz-post-label contributors" }]
+authors = [{ name = "clickpost-printer contributors" }]
+keywords = ["clickpost", "japan-post", "label-printer", "thermal-printer", "ble", "web-bluetooth"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Printing",
+]
 dependencies = [
     "pymupdf>=1.24",
     "pillow>=10",
@@ -19,6 +30,11 @@ dependencies = [
 ble = ["bleak>=0.22"]
 usb = ["pyusb>=1.2"]
 
+[project.urls]
+Homepage = "https://clickpost.l-l.li/"
+Repository = "https://github.com/clementatt/clickpost-printer"
+Issues = "https://github.com/clementatt/clickpost-printer/issues"
+
 [project.scripts]
 dzpost = "dzpost.cli:main"
 
@@ -27,6 +43,3 @@ package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-[tool.setuptools.package-data]
-dzpost = ["py.typed"]

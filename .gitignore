@@ -25,3 +25,5 @@ web/node_modules/
 web/dist/
 web/public/cmaps/
 web/public/standard_fonts/
+
+web-dist.zip
