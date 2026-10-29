@@ -1,0 +1,143 @@
+:root {
+  color-scheme: light dark;
+  --bg: #fbfbfa;
+  --fg: #17181a;
+  --muted: #6b6f76;
+  --line: #e3e3e0;
+  --card: #ffffff;
+  --accent: #c0392b;
+  --accent-fg: #ffffff;
+  --ok: #1f7a4d;
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121314;
+    --fg: #ecedee;
+    --muted: #9aa0a6;
+    --line: #2a2c2f;
+    --card: #1a1c1e;
+    --accent: #e05b4b;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  line-height: 1.6;
+}
+
+header, main, footer { max-width: 880px; margin: 0 auto; padding: 0 20px; }
+
+header { padding-top: 40px; }
+h1 { font-size: 26px; margin: 0 0 8px; letter-spacing: 0.01em; }
+.sub { color: var(--muted); font-size: 14px; margin: 0; }
+
+.banner {
+  max-width: 840px;
+  margin: 20px auto 0;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.drop {
+  margin: 28px 0 20px;
+  border: 1.5px dashed var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  padding: 34px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--card)); }
+.drop-title { font-size: 16px; margin: 0 0 4px; font-weight: 600; }
+.drop-hint { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+
+button {
+  font: inherit;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--fg);
+  padding: 9px 16px;
+  cursor: pointer;
+  transition: transform 0.08s ease, background 0.15s ease;
+}
+button:hover:not(:disabled) { transform: translateY(-1px); }
+button:disabled { opacity: 0.45; cursor: default; }
+button.primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; font-weight: 600; }
+button.secondary { border-color: var(--fg); }
+button.ghost { background: transparent; }
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  font-size: 13px;
+}
+.toolbar label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+.toolbar input, .toolbar select {
+  font: inherit;
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 6px;
+  width: 72px;
+}
+.toolbar select { width: auto; }
+
+.page h2 { font-size: 14px; font-weight: 600; color: var(--muted); margin: 22px 0 10px; }
+
+.labels {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  cursor: pointer;
+}
+.card:has(input:checked) { border-color: var(--accent); }
+.card input { position: absolute; opacity: 0; pointer-events: none; }
+.thumb {
+  width: 100%;
+  border-radius: 4px;
+  background: #fff;
+  border: 1px solid var(--line);
+  image-rendering: pixelated;
+}
+.meta { font-size: 12px; color: var(--muted); }
+
+.actions { display: flex; gap: 10px; margin: 22px 0 10px; flex-wrap: wrap; }
+progress { width: 100%; height: 6px; appearance: none; border: none; background: transparent; }
+progress::-webkit-progress-bar { background: var(--line); border-radius: 3px; }
+progress::-webkit-progress-value { background: var(--accent); border-radius: 3px; }
+
+.log { margin: 18px 0 40px; font-size: 13px; color: var(--muted); min-height: 40px; }
+.log-line { padding: 3px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.log-line.error { color: var(--accent); }
+.log-line.ok { color: var(--ok); }
+
+footer { padding: 20px 20px 60px; color: var(--muted); font-size: 12px; }

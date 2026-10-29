@@ -32,8 +32,8 @@ class TestHelpers(unittest.TestCase):
         self.assertEqual(display_width("abc"), 3)
 
     def test_normalize_zip(self):
-        self.assertEqual(normalize_zip("９０１－０２４１"), "100-0001")
-        self.assertEqual(normalize_zip(" 901 0241 "), "9010241")
+        self.assertEqual(normalize_zip("１００－０００１"), "100-0001")
+        self.assertEqual(normalize_zip(" 100 0001 "), "1000001")
 
     def test_row_shape(self):
         row = ok_row()

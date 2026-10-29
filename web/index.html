@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <title>クリックポスト ラベル印刷 — ブラウザから直接</title>
+    <meta
+      name="description"
+      content="クリックポストの PDF をブラウザ内で A6 ラベルに切り分け、Web Bluetooth で DeTong DP305P から直接印刷します。PDF はアップロードされません。"
+    />
+  </head>
+  <body>
+    <header>
+      <h1>クリックポスト ラベル印刷</h1>
+      <p class="sub">
+        PDF をこのブラウザ内だけで処理し、Bluetooth でプリンタへ直接送ります。<br />
+        サーバーへのアップロードはありません。
+      </p>
+    </header>
+
+    <p class="banner" hidden>
+      このブラウザは Web Bluetooth に対応していません。Chrome または Edge
+      （デスクトップ）で開いてください。PDF の切り分け・プレビューは可能です。
+    </p>
+
+    <main>
+      <section id="drop" class="drop">
+        <div class="drop-inner">
+          <p class="drop-title">クリックポストの PDF をドロップ</p>
+          <p class="drop-hint">1 枚でも、まとめ申込の 4 面シートでも OK</p>
+          <button id="browse" class="ghost" type="button">ファイルを選ぶ</button>
+          <button id="sample" class="ghost" type="button">サンプルで試す</button>
+        </div>
+        <input id="file" type="file" accept="application/pdf,.pdf" hidden />
+      </section>
+
+      <section id="sheet" hidden>
+        <div class="toolbar">
+          <label>濃度 <input id="darkness" type="number" min="1" max="15" value="10" /></label>
+          <label>速度 <input id="speed" type="number" min="1" max="5" value="3" /></label>
+          <label>
+            用紙
+            <select id="paper">
+              <option value="adhesive" selected>ラベル</option>
+              <option value="ticket">レシート</option>
+              <option value="card">カード</option>
+              <option value="transparent">透明</option>
+            </select>
+          </label>
+          <label>
+            超采样
+            <select id="supersample">
+              <option value="1">1x</option>
+              <option value="2" selected>2x</option>
+            </select>
+          </label>
+        </div>
+
+        <div id="pages"></div>
+
+        <div class="actions">
+          <button id="connect" type="button" class="secondary" data-busy-lock>プリンタに接続</button>
+          <button id="print" type="button" class="primary" data-busy-lock>印刷する (0 枚)</button>
+          <button id="download" type="button" class="ghost" data-busy-lock>コマンド列 (.bin)</button>
+        </div>
+        <progress id="progress" value="0" max="1"></progress>
+      </section>
+
+      <section class="log" aria-live="polite"></section>
+    </main>
+
+    <footer>
+      <p>
+        非公式ツールです。日本郵便・德佟印立方とは関係ありません。ラベルの複製・改変は行わず、
+        郵便局が発行した PDF をそのまま切り出して印刷します。
+      </p>
+    </footer>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

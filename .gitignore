@@ -18,3 +18,10 @@ fixtures/local/*
 
 # macOS
 .DS_Store
+
+# web
+node_modules/
+web/node_modules/
+web/dist/
+web/public/cmaps/
+web/public/standard_fonts/

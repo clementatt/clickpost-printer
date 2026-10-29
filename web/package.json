@@ -1,0 +1,27 @@
+{
+  "name": "clickpost-printer-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "preview": "vite preview --port 4173",
+    "test": "node --test src/",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "predev": "node tools/copy-pdf-assets.mjs",
+    "prebuild": "node tools/copy-pdf-assets.mjs",
+    "verify:pdf": "node tools/verify-pdf.mjs"
+  },
+  "dependencies": {
+    "pdfjs-dist": "^4.10.38"
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "^1.0.13",
+    "@types/node": "^22.10.2",
+    "@types/web-bluetooth": "^0.0.20",
+    "playwright": "^1.64.1",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3"
+  }
+}
