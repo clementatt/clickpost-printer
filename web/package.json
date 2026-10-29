@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "preview": "vite preview --port 4173",
-    "test": "node --test src/protocol.test.ts src/detect.test.ts src/printlog.test.ts",
+    "test": "node --test src/protocol.test.ts src/detect.test.ts src/printlog.test.ts src/ble.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "predev": "node tools/copy-pdf-assets.mjs",
     "prebuild": "node tools/copy-pdf-assets.mjs",

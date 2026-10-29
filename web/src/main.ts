@@ -1,6 +1,6 @@
 import "./style.css";
 
-import { Printer, isSupported } from "./ble.ts";
+import { Printer, describeError, isSupported } from "./ble.ts";
 import { analyseDocument, autoOffset, composeOnHead, openPdf, renderLabel } from "./pdfdoc.ts";
 import { buildStream, DPI, PRINT_HEAD_DOTS, type Bitmap } from "./protocol.ts";
 import type { Box } from "./detect.ts";
@@ -224,10 +224,11 @@ async function printSelected(): Promise<void> {
       const { bitmap, stream } = await buildJobBitmaps(job);
       const label = `[${i + 1}/${jobs.length}] ページ${job.pageIndex + 1} #${job.indexOnPage + 1}`;
       log(`${label}: ${bitmap.width}×${bitmap.rows.length} dots, ${stream.length} bytes`);
-      await state.printer.send(stream, (sent, total) => {
+      const seconds = await state.printer.send(stream, (sent, total) => {
         bar.max = total;
         bar.value = sent;
       });
+      log(`${label}: 送信 ${seconds.toFixed(1)}s`);
       const status = await state.printer.query(0x70);
       const statusText = state.printer.describeStatus(status);
       const tracking = guessTracking(state.fileName);
@@ -258,19 +259,51 @@ async function printSelected(): Promise<void> {
   }
 }
 
-async function connect(): Promise<void> {
+async function connect(acceptAll = false, remembered = false): Promise<void> {
+  const step = (msg: string) => log(`  ${msg}`);
   try {
     if (!isSupported()) {
       log("このブラウザは Web Bluetooth 非対応です（Chrome / Edge を使ってください）", "error");
       return;
     }
-    log("デバイスを選択してください…");
-    await state.printer.request();
-    await state.printer.connect();
-    log(`接続: ${state.printer.name}`, "ok");
+    setBusy(true);
+    if (remembered) {
+      const name = await state.printer.useRemembered();
+      if (!name) {
+        log("以前に許可したデバイスがありません。「プリンタに接続」から選んでください", "error");
+        return;
+      }
+      log(`記憶しているデバイス: ${name}`);
+    } else {
+      log("デバイスを選択してください…");
+      const name = await state.printer.request(acceptAll);
+      log(`選択: ${name}`);
+    }
+    await state.printer.connect(step);
+    log(`接続: ${state.printer.name}${state.printer.mtu ? ` (MTU ${state.printer.mtu})` : ""}`, "ok");
     $("#print").removeAttribute("disabled");
+    ($("#self-test") as HTMLButtonElement).disabled = false;
+
+    const info = await state.printer.selfTest(step);
+    log(`プリンタ応答 OK: ${info.name} / 状態 ${info.status} / 用紙 ${info.paper}`, "ok");
   } catch (err) {
-    log(`接続失敗: ${(err as Error).message}`, "error");
+    log(`接続失敗: ${describeError(err)}`, "error");
+    if ((err as Error).message?.includes("選ばれません")) {
+      log("ヒント: プリンタの電源が入っていて、スマホアプリ等が接続していないか確認してください", "info");
+    }
+    console.error(err);
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function selfTest(): Promise<void> {
+  try {
+    const step = (msg: string) => log(`  ${msg}`);
+    const info = await state.printer.selfTest(step);
+    log(`接続テスト: ${info.name} / 状態 ${info.status} / 用紙 ${info.paper}`, "ok");
+  } catch (err) {
+    log(`接続テスト失敗: ${describeError(err)}`, "error");
   }
 }
 
@@ -344,7 +377,10 @@ function wire(): void {
     })();
   });
 
-  $("#connect").addEventListener("click", () => void connect());
+  $("#connect").addEventListener("click", () => void connect(false, false));
+  $("#connect-all").addEventListener("click", () => void connect(true, false));
+  $("#connect-remembered").addEventListener("click", () => void connect(false, true));
+  $("#self-test").addEventListener("click", () => void selfTest());
   $("#print").addEventListener("click", () => void printSelected());
   $("#download").addEventListener("click", () => void downloadStream());
   $("#log-csv").addEventListener("click", () => downloadLog("csv"));
