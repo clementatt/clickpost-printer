@@ -1,0 +1,20 @@
+# virtualenvs
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# rendered output
+out/
+*.bin
+!tests/data/*.bin
+
+# real shipping labels: personal data, never commit
+fixtures/local/*
+!fixtures/local/.gitkeep
+
+# macOS
+.DS_Store

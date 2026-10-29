@@ -1,0 +1,319 @@
+"""Command line interface: ``python -m dzpost`` / ``dzpost``."""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import hashlib
+import sys
+import time
+from dataclasses import dataclass
+from pathlib import Path
+
+try:
+    import pymupdf as fitz
+except ImportError:  # pragma: no cover
+    import fitz  # type: ignore
+
+from . import __version__
+from .decode import decode_stream
+from .layout import Canvas, compose
+from .pdfbox import LabelBox, content_box, detect_label_box, MM_PER_PT
+from .protocol import (
+    DPI,
+    PAPER_ADHESIVE,
+    PAPER_CARD,
+    PAPER_TICKET,
+    PAPER_TRANSPARENT,
+    PRINT_HEAD_DOTS,
+    build_stream,
+)
+from .raster import coverage, to_bilevel
+from .render import render_label
+
+PAPER_TYPES = {
+    "adhesive": PAPER_ADHESIVE,
+    "ticket": PAPER_TICKET,
+    "card": PAPER_CARD,
+    "transparent": PAPER_TRANSPARENT,
+}
+
+
+@dataclass
+class Job:
+    box: LabelBox
+    canvas: Canvas
+    gray: "object"  # PIL.Image.Image, composed on the head canvas
+    bilevel: "object"
+    stream: bytes
+
+    @property
+    def label_dots(self) -> tuple[int, int]:
+        """Size of the pasted content (dots), not the head canvas."""
+        from PIL import ImageOps
+        bbox = ImageOps.invert(self.bilevel.convert("L")).getbbox()
+        if not bbox:
+            return (0, 0)
+        return (bbox[2] - bbox[0], bbox[3] - bbox[1])
+
+
+def _parse_crop(text: str) -> tuple[float, float, float, float]:
+    parts = [p for p in text.replace(",", " ").split() if p]
+    if len(parts) != 4:
+        raise argparse.ArgumentTypeError("crop must be x0,y0,x1,y1 in mm")
+    values = tuple(float(p) for p in parts)
+    if values[2] <= values[0] or values[3] <= values[1]:
+        raise argparse.ArgumentTypeError("crop needs x1 > x0 and y1 > y0")
+    return values  # type: ignore[return-value]
+
+
+def _build(args) -> Job:
+    doc = fitz.open(args.pdf)
+    try:
+        if not 0 <= args.page < doc.page_count:
+            raise SystemExit(f"page {args.page} does not exist "
+                             f"(document has {doc.page_count} page(s))")
+        page = doc[args.page]
+        notes: list[str] = []
+        box = detect_label_box(page, debug=notes)
+        page_size = (page.rect.width * MM_PER_PT, page.rect.height * MM_PER_PT)
+        if args.crop:
+            x0, y0, x1, y1 = args.crop
+            box = LabelBox(x0 / MM_PER_PT, y0 / MM_PER_PT, x1 / MM_PER_PT,
+                           y1 / MM_PER_PT, "manual")
+        elif args.trim == "ink":
+            box = content_box(page, box, margin_mm=args.margin_mm)
+    finally:
+        doc.close()
+
+    canvas = Canvas(width_mm=args.width_mm, height_mm=args.height_mm,
+                    dpi=args.dpi, head_dots=args.head_dots)
+    rendered = render_label(args.pdf, box, width_px=canvas.width_dots,
+                            page_index=args.page, supersample=args.supersample)
+    x_offset = None if args.x_offset == "auto" else int(args.x_offset)
+    gray = compose(rendered.image, canvas, fit=args.fit, x_offset=x_offset,
+                   v_align=args.v_align)
+    bilevel = to_bilevel(gray, args.threshold)
+    stream = build_stream(
+        bilevel,
+        paper_type=PAPER_TYPES[args.paper],
+        darkness=args.darkness - 1 if args.darkness else None,
+        speed=args.speed - 1 if args.speed else None,
+    )
+    if args.verbose:
+        for line in notes:
+            print(f"  {line}", file=sys.stderr)
+        print(f"  page {page_size[0]:.1f} x {page_size[1]:.1f} mm", file=sys.stderr)
+        print(f"  effective dpi of the artwork: {rendered.dpi_effective:.0f}", file=sys.stderr)
+    return Job(box, canvas, gray, bilevel, stream)
+
+
+def _report(job: Job, args) -> None:
+    c = job.canvas
+    scale = job.box.width_mm / c.width_mm
+    print(f"label region : {job.box.describe()}")
+    print(f"canvas       : {c.width_dots} x {c.height_dots} dots "
+          f"({c.width_mm:g} x {c.height_mm:g} mm @ {c.dpi} dpi, "
+          f"{c.head_dots}-dot head, x offset {c.auto_offset})")
+    print(f"content      : {job.label_dots[0]} x {job.label_dots[1]} dots "
+          f"(scale {100 / (job.box.width_mm / c.width_mm):.0f}% of source)")
+    print(f"ink coverage : {coverage(job.bilevel) * 100:.1f} %")
+    print(f"stream       : {len(job.stream)} bytes, "
+          f"sha256 {hashlib.sha256(job.stream).hexdigest()[:16]}")
+    print(f"BLE estimate : ~{len(job.stream) / 4900:.1f} s at 4.9 KB/s")
+
+
+def _write_outputs(job: Job, args) -> None:
+    if args.output:
+        out = Path(args.output)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        (job.bilevel if args.bitmap else job.gray).save(out)
+        print(f"preview      : {out}")
+    if args.stream:
+        out = Path(args.stream)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(job.stream)
+        print(f"stream       : {out} ({len(job.stream)} bytes)")
+
+
+def cmd_info(args) -> int:
+    job = _build(args)
+    _report(job, args)
+    return 0
+
+
+def cmd_render(args) -> int:
+    job = _build(args)
+    _report(job, args)
+    _write_outputs(job, args)
+    return 0
+
+
+async def _print_ble(job: Job, args) -> int:
+    from .ble import BlePrinter
+
+    printer = BlePrinter(name_hints=tuple(args.device) if args.device
+                         else ("dp305", "dp27", "detong", "dt20"))
+    await printer.connect()
+    try:
+        print(f"connected    : {printer.device_name} (MTU {printer.mtu})")
+        status = await printer.query(0x70)
+        if status:
+            print(f"status       : 0x{status[3]:02X}")
+        t0 = time.monotonic()
+        await printer.send(job.stream, window=args.window)
+        sent = time.monotonic() - t0
+        print(f"sent         : {len(job.stream)} bytes in {sent:.1f}s "
+              f"({len(job.stream) / max(sent, 1e-6) / 1024:.1f} KiB/s)")
+        code = await printer.wait_idle(timeout=args.timeout)
+        print(f"final status : 0x{code:02X}" if code is not None else "final status : unknown")
+        return 0 if code == 0x00 else 1
+    finally:
+        await printer.disconnect()
+
+
+def _print_usb(job: Job, args) -> int:
+    from .usb import UsbPrinter
+
+    printer = UsbPrinter()
+    try:
+        status = printer.query(0x70)
+        if status:
+            print(f"status       : 0x{status[3]:02X}")
+        dt = printer.send(job.stream)
+        print(f"sent         : {len(job.stream)} bytes in {dt:.2f}s "
+              f"({len(job.stream) / max(dt, 1e-6) / 1024:.0f} KiB/s)")
+        return 0
+    finally:
+        printer.close()
+
+
+def cmd_print(args) -> int:
+    job = _build(args)
+    _report(job, args)
+    if args.dry_run:
+        out = Path(args.dry_run)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(job.stream)
+        print(f"dry-run      : wrote {len(job.stream)} bytes to {out}")
+        return 0
+    if args.transport == "ble":
+        return asyncio.run(_print_ble(job, args))
+    return _print_usb(job, args)
+
+
+def cmd_scan(args) -> int:
+    from .ble import BlePrinter
+
+    devices = asyncio.run(BlePrinter.scan(args.timeout))
+    for name, address in devices:
+        print(f"  {name:24s} {address}")
+    if not devices:
+        print("  (no BLE devices found)")
+    return 0
+
+
+def cmd_verify(args) -> int:
+    data = Path(args.stream_file).read_bytes()
+    dec = decode_stream(data)
+    print(f"bytes        : {len(data)}")
+    print(f"rows         : {len(dec.lines)} printed + {dec.feeds} fed = "
+          f"{dec.total_rows} dot rows")
+    print(f"form feeds   : {dec.form_feeds}, resets: {dec.resets}, "
+          f"repeat cmds: {dec.repeat_commands}")
+    print(f"settings     : {[(hex(t), d.hex()) for _, t, d in dec.mgmt]}")
+    if dec.bad_checksums:
+        print(f"CHECKSUMS    : {len(dec.bad_checksums)} BAD")
+        return 1
+    print("checksums    : ok")
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="dzpost",
+        description="Print Japan Post ClickPost labels on a DeTong DP-series "
+                    "thermal printer.")
+    p.add_argument("--version", action="version", version=f"dzpost {__version__}")
+    sub = p.add_subparsers(dest="command", required=True)
+
+    def common(sp, *, output: bool):
+        sp.add_argument("pdf", help="ClickPost PDF exported from Japan Post")
+        sp.add_argument("--page", type=int, default=0, help="page index (default 0)")
+        sp.add_argument("--crop", type=_parse_crop, metavar="X0,Y0,X1,Y1",
+                        help="override the detected region, in mm from the page's "
+                             "top-left corner")
+        sp.add_argument("--width-mm", type=float, default=76.0,
+                        help="label stock width (default 76)")
+        sp.add_argument("--height-mm", type=float, default=130.0,
+                        help="label stock height (default 130)")
+        sp.add_argument("--dpi", type=int, default=DPI, help="printer resolution")
+        sp.add_argument("--head-dots", type=int, default=PRINT_HEAD_DOTS,
+                        help="print head width in dots (DP305P: 960)")
+        sp.add_argument("--trim", choices=("ink", "none"), default="ink",
+                        help="'ink' crops the A6 cut marks away and keeps only "
+                             "the printed label frame (default); 'none' keeps "
+                             "the whole A6 area")
+        sp.add_argument("--margin-mm", type=float, default=1.0,
+                        help="margin kept around the artwork when --trim ink")
+        sp.add_argument("--fit", choices=("contain", "width", "height", "none"),
+                        default="contain")
+        sp.add_argument("--x-offset", default="auto",
+                        help="'auto' centres on the head, or a dot offset")
+        sp.add_argument("--v-align", choices=("top", "center"), default="top")
+        sp.add_argument("--threshold", type=int, default=128,
+                        help="binarisation threshold 0-255 (default 128)")
+        sp.add_argument("--supersample", type=int, default=2,
+                        help="render scale multiplier before downsampling")
+        sp.add_argument("--paper", choices=tuple(PAPER_TYPES), default="adhesive")
+        sp.add_argument("--darkness", type=int, default=10,
+                        help="1-based darkness, 1..15 (device value = N-1)")
+        sp.add_argument("--speed", type=int, default=3,
+                        help="1-based speed, 1..5 (device value = N-1)")
+        sp.add_argument("-v", "--verbose", action="store_true")
+        if output:
+            sp.add_argument("-o", "--output", help="preview PNG path")
+            sp.add_argument("--bitmap", action="store_true",
+                            help="save the 1-bit image instead of grayscale")
+            sp.add_argument("--stream", help="also write the raw command stream")
+
+    sp = sub.add_parser("info", help="show how the PDF would be cropped")
+    common(sp, output=False)
+    sp.set_defaults(func=cmd_info)
+
+    sp = sub.add_parser("render", help="render a preview and/or command stream")
+    common(sp, output=True)
+    sp.set_defaults(func=cmd_render)
+
+    sp = sub.add_parser("print", help="render and send to the printer")
+    common(sp, output=True)
+    sp.add_argument("--transport", choices=("ble", "usb"), default="ble")
+    sp.add_argument("--device", action="append",
+                    help="BLE name substring to look for (repeatable)")
+    sp.add_argument("--window", type=int, default=8,
+                    help="BLE credit window (8 measured fastest)")
+    sp.add_argument("--timeout", type=float, default=60.0)
+    sp.add_argument("--dry-run", metavar="FILE",
+                    help="write the command stream instead of printing")
+    sp.set_defaults(func=cmd_print)
+
+    sp = sub.add_parser("scan", help="list nearby BLE devices")
+    sp.add_argument("--timeout", type=float, default=8.0)
+    sp.set_defaults(func=cmd_scan)
+
+    sp = sub.add_parser("verify", help="decode a command stream and check it")
+    sp.add_argument("stream_file")
+    sp.set_defaults(func=cmd_verify)
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    try:
+        return args.func(args)
+    except KeyboardInterrupt:
+        return 130
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())
