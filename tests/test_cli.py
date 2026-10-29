@@ -36,13 +36,14 @@ class TestCli(unittest.TestCase):
     def test_info(self):
         code, out, _ = run(["info", str(self.sheet)])
         self.assertEqual(code, 0)
-        self.assertIn("label region", out)
-        self.assertIn("content", out)  # default --trim ink keeps the label frame
+        self.assertIn("label #1", out)
+        self.assertIn("(source: content)", out)  # default --trim ink
 
     def test_info_without_trim_uses_cut_box(self):
         code, out, _ = run(["info", str(self.sheet), "--trim", "none"])
         self.assertEqual(code, 0)
-        self.assertIn("cut-marks", out)
+        # the untrimmed box is the full A6 cut area
+        self.assertIn("104.8 x 147.6 mm", out)
 
     def test_render_writes_png_and_stream(self):
         png = self.dir / "preview.png"
@@ -83,3 +84,36 @@ class TestCli(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMultiLabelCli(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        from test_pdfbox import make_4up_sheet
+        self.sheet = make_4up_sheet(self.dir / "four.pdf")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_info_reports_four(self):
+        code, out, _ = run(["info", str(self.sheet)])
+        self.assertEqual(code, 0)
+        self.assertIn("detected 4 label(s)", out)
+
+    def test_dry_run_writes_one_stream_per_label(self):
+        dry = self.dir / "batch.bin"
+        code, out, _ = run(["print", str(self.sheet), "--labels", "all",
+                            "--dry-run", str(dry)])
+        self.assertEqual(code, 0)
+        produced = sorted(p.name for p in self.dir.glob("batch-*.bin"))
+        self.assertEqual(produced, [f"batch-{i}.bin" for i in range(1, 5)])
+        for name in produced:
+            dec = decode_stream((self.dir / name).read_bytes())
+            self.assertEqual(dec.form_feeds, 1)
+            self.assertEqual(dec.bad_checksums, [])
+
+    def test_index_selects_one_label(self):
+        code, out, _ = run(["info", str(self.sheet), "--index", "2"])
+        self.assertEqual(code, 0)
+        self.assertIn("label #3", out)

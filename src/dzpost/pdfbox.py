@@ -21,7 +21,9 @@ try:  # PyMuPDF >= 1.24 renamed the module
 except ImportError:  # pragma: no cover
     import fitz  # type: ignore
 
-__all__ = ["LabelBox", "detect_label_box", "content_box", "MM_PER_PT", "A6_MM"]
+__all__ = ["LabelBox", "detect_label_box", "detect_label_boxes",
+           "content_box", "cut_grid_positions", "overlaps",
+           "MM_PER_PT", "A6_MM"]
 
 MM_PER_PT = 25.4 / 72.0
 A6_MM = (105.0, 148.0)  # ClickPost label stock
@@ -103,6 +105,16 @@ def _lines(page) -> tuple[list, list]:
     return vert, horz
 
 
+def overlaps(r, bounds: LabelBox, eps: float = 1.0) -> bool:
+    """Overlap test that also works for zero-width/height line rects."""
+    return not (
+        r.x1 < bounds.x0 - eps
+        or r.x0 > bounds.x1 + eps
+        or r.y1 < bounds.y0 - eps
+        or r.y0 > bounds.y1 + eps
+    )
+
+
 def _plausible(box: LabelBox, tolerance: float = 0.18) -> bool:
     want = A6_MM[0] / A6_MM[1]
     return (
@@ -112,19 +124,34 @@ def _plausible(box: LabelBox, tolerance: float = 0.18) -> bool:
     )
 
 
-def _ink_bbox(page) -> "fitz.Rect | None":
+def _ink_bbox(page, bounds: LabelBox | None = None) -> "fitz.Rect | None":
+    """Bounding box of the artwork; with ``bounds`` only sheet furniture that
+    belongs to that cell (cut marks and their annotations are skipped)."""
     box = None
     for b in page.get_text("blocks"):
-        box = union(box, fitz.Rect(b[:4]))
+        r = fitz.Rect(b[:4])
+        if bounds is not None:
+            if not overlaps(r, bounds) or _is_cut_text(str(b[4])):
+                continue
+        box = union(box, r)
     for img in page.get_image_info():
-        box = union(box, fitz.Rect(img["bbox"]))
+        r = fitz.Rect(img["bbox"])
+        if bounds is not None and not overlaps(r, bounds):
+            continue
+        box = union(box, r)
     for d in page.get_drawings():
-        box = union(box, d["rect"])
+        r = d["rect"]
+        if bounds is not None:
+            if not overlaps(r, bounds):
+                continue
+            if _is_long_rule(r, page.rect) and _touches_edge(r, bounds):
+                continue
+        box = union(box, r)
     return box
 
 
 def detect_label_box(page, *, debug: list[str] | None = None) -> LabelBox:
-    """Return the label region of ``page`` (PDF points)."""
+    """Return the (single) label region of ``page`` in PDF points."""
     W, H = page.rect.width, page.rect.height
     notes = debug if debug is not None else []
 
@@ -134,7 +161,7 @@ def detect_label_box(page, *, debug: list[str] | None = None) -> LabelBox:
     if abs(mm(W) - A6_MM[0]) < 10 and abs(mm(H) - A6_MM[1]) < 10:
         return LabelBox(0, 0, W, H, "page-is-label")
 
-    # 2. L-shaped cut marks
+    # 2. L-shaped cut marks at the top-left corner
     vert, horz = _lines(page)
     top_marks = [r for r in vert if abs(r.y0) < 1.5]
     left_marks = [r for r in horz if abs(r.x0) < 1.5]
@@ -165,6 +192,64 @@ def detect_label_box(page, *, debug: list[str] | None = None) -> LabelBox:
     return LabelBox(0.0, 0.0, W, H, "whole-page")
 
 
+# --------------------------------------------------------------- many labels
+
+def cut_grid_positions(page) -> tuple[list[float], list[float]]:
+    """x/y positions of the paper-spanning cut lines, page edges included."""
+    W, H = page.rect.width, page.rect.height
+    xs, ys = {0.0, W}, {0.0, H}
+    for drawing in page.get_drawings():
+        r = drawing["rect"]
+        vertical = (r.width <= 3.0 and r.height >= 0.35 * H
+                    and (abs(r.y0) < 2 or abs(r.y1 - H) < 2))
+        horizontal = (r.height <= 3.0 and r.width >= 0.35 * W
+                      and (abs(r.x0) < 2 or abs(r.x1 - W) < 2))
+        if vertical:
+            xs.add(round(r.x0, 2))  # leading edge of the rule = cell boundary
+        elif horizontal:
+            ys.add(round(r.y0, 2))
+    return sorted(xs), sorted(ys)
+
+
+def _cell_has_artwork(page, cell: LabelBox) -> bool:
+    """A real label fills most of its cell; neighbouring whitespace does not."""
+    ink = _ink_bbox(page, cell)
+    if ink is None:
+        return False
+    return (ink.width >= 0.40 * cell.width_pt
+            and ink.height >= 0.40 * cell.height_pt)
+
+
+def detect_label_boxes(page, *, debug: list[str] | None = None) -> list[LabelBox]:
+    """All label cells on a sheet: 1-up A4, 4-up A4 (2 x 2 A6), ...
+
+    ClickPost's まとめ申込 emits 2 x 2 A6 labels per A4 sheet, separated by cut
+    lines that run to the paper edge.  Cells are the rectangles between adjacent
+    cut positions; empty cells (whitespace) are dropped.
+    """
+    notes = debug if debug is not None else []
+    W, H = page.rect.width, page.rect.height
+
+    if abs(mm(W) - A6_MM[0]) < 10 and abs(mm(H) - A6_MM[1]) < 10:
+        return [LabelBox(0, 0, W, H, "page-is-label")]
+
+    xs, ys = cut_grid_positions(page)
+    if len(xs) > 2 or len(ys) > 2:
+        cells: list[LabelBox] = []
+        for i in range(len(xs) - 1):
+            for j in range(len(ys) - 1):
+                cand = LabelBox(xs[i], ys[j], xs[i + 1], ys[j + 1], "grid")
+                if not _plausible(cand) or not _cell_has_artwork(page, cand):
+                    continue
+                cells.append(cand)
+        if cells:
+            cells.sort(key=lambda b: (round(b.y0), round(b.x0)))
+            notes.append(f"cut grid x={xs} y={ys} -> {len(cells)} label(s)")
+            return cells
+
+    return [detect_label_box(page, debug=notes)]
+
+
 _CUT_ANNOTATIONS = ("切り取る", "切取", "切りはなし")
 
 
@@ -191,10 +276,12 @@ def _touches_edge(rect, bounds: LabelBox, tol: float = 2.0) -> bool:
 
 
 def label_frame(page, bounds: LabelBox) -> "fitz.Rect | None":
-    """The printed frame of the label, if the sheet draws one."""
+    """The printed frame of the label inside ``bounds``, if the sheet draws one."""
     frame = None
     for drawing in page.get_drawings():
         r = drawing["rect"]
+        if not overlaps(r, bounds):
+            continue
         if not _is_long_rule(r, page.rect) or _touches_edge(r, bounds):
             continue
         frame = union(frame, r)
@@ -216,17 +303,16 @@ def content_box(page, bounds: LabelBox, *, margin_mm: float = 1.0) -> LabelBox:
 
     def keep(r) -> None:
         nonlocal ink
-        ink = union(ink, r)
+        r = fitz.Rect(r)
+        if overlaps(r, bounds):
+            ink = union(ink, r)
 
     for block in page.get_text("dict")["blocks"]:
-        text = ("".join(span["text"] for line in block["lines"]
-                        for span in block["lines"][0].get("spans", []))
-                if block["type"] == 0 else "")
         if block["type"] == 0:
             text = "".join(span["text"] for line in block["lines"]
                            for span in line["spans"])
-        if _is_cut_text(text):
-            continue
+            if _is_cut_text(text):
+                continue
         keep(block["bbox"])
     for img in page.get_image_info():
         keep(img["bbox"])
@@ -243,7 +329,7 @@ def content_box(page, bounds: LabelBox, *, margin_mm: float = 1.0) -> LabelBox:
         allowed = fitz.Rect(frame.x0 - pad, frame.y0 - pad,
                             frame.x1 + pad, frame.y1 + pad)
         ink &= allowed
-    clipped = ink & bounds.rect  # plain intersection
+    clipped = ink & bounds.rect
     if clipped.is_empty or clipped.width < pt(20) or clipped.height < pt(20):
         return bounds
     return LabelBox(clipped.x0, clipped.y0, clipped.x1, clipped.y1, "content")

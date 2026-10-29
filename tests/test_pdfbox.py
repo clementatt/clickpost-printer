@@ -14,6 +14,7 @@ from dzpost.pdfbox import (  # noqa: E402
     LabelBox,
     content_box,
     detect_label_box,
+    detect_label_boxes,
     label_frame,
 )
 
@@ -112,3 +113,61 @@ class TestDetect(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------- 4-up sheets
+
+def make_4up_sheet(path: Path):
+    """A4 sheet with four A6 labels, cut lines running to the paper edge."""
+    doc = fitz.open()
+    page = doc.new_page(width=A4[0], height=A4[1])
+    cx, cy = A4[0] / 2, A4[1] / 2
+    page.draw_line((cx, 0), (cx, A4[1]), width=1.5)
+    page.draw_line((0, cy), (A4[0], cy), width=1.5)
+    for ox, oy in ((0, 0), (cx, 0), (0, cy), (cx, cy)):
+        x0, y0 = ox + 15.8, oy + 15.8
+        x1, y1 = ox + cx - 15.8, oy + cy - 15.8
+        for a, b in (((x0, y0), (x0, y1)), ((x1, y0), (x1, y1)),
+                     ((x0, y0), (x1, y0)), ((x0, y1), (x1, y1))):
+            page.draw_line(a, b, width=2)
+        page.insert_text((ox + 40, oy + 80), "CLICKPOST", fontsize=14)
+        page.insert_text((ox + 40, oy + 120), "100-0001 TOKYO", fontsize=10)
+    doc.save(path)
+    doc.close()
+    return path
+
+
+class TestMultiLabel(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_single_label_sheet(self):
+        sheet = make_sheet(self.dir / "one.pdf")
+        doc = fitz.open(sheet)
+        boxes = detect_label_boxes(doc[0])
+        doc.close()
+        self.assertEqual(len(boxes), 1)
+
+    def test_four_labels_on_one_sheet(self):
+        sheet = make_4up_sheet(self.dir / "four.pdf")
+        doc = fitz.open(sheet)
+        boxes = detect_label_boxes(doc[0])
+        page = doc[0]
+        trimmed = [content_box(page, b) for b in boxes]
+        doc.close()
+        self.assertEqual(len(boxes), 4)
+        for box in boxes:
+            self.assertAlmostEqual(box.width_mm, 104.9, delta=1.5)
+            self.assertAlmostEqual(box.height_mm, 148.5, delta=1.5)
+        # reading order: row by row, left to right
+        self.assertLess(boxes[0].x0, boxes[1].x0)
+        self.assertAlmostEqual(boxes[0].y0, boxes[1].y0, places=1)
+        self.assertLess(boxes[0].y0, boxes[2].y0)
+        # every cell trims down onto its own frame
+        for cut, ink in zip(boxes, trimmed):
+            self.assertEqual(ink.source, "content")
+            self.assertLess(ink.width_pt, cut.width_pt)

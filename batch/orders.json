@@ -1,0 +1,33 @@
+{
+  "_readme": "ここを編集して `dzpost csv build batch/orders.json -o batch/clickpost-4件.csv` を実行する。1〜4 行目は同じお届け先（サンプルラベルの実データ）の複製なので、別々の宛先なら書き換えること。",
+  "recipients": [
+    {
+      "zip": "100-0001",
+      "name": "株式会社サンプル商事",
+      "honorific": "御中",
+      "address": ["東京都千代田区千代田1-1"],
+      "contents": "SIMカード"
+    },
+    {
+      "zip": "100-0001",
+      "name": "株式会社サンプル商事",
+      "honorific": "御中",
+      "address": ["東京都千代田区千代田1-1"],
+      "contents": "SIMカード"
+    },
+    {
+      "zip": "100-0001",
+      "name": "株式会社サンプル商事",
+      "honorific": "御中",
+      "address": ["東京都千代田区千代田1-1"],
+      "contents": "SIMカード"
+    },
+    {
+      "zip": "100-0001",
+      "name": "株式会社サンプル商事",
+      "honorific": "御中",
+      "address": ["東京都千代田区千代田1-1"],
+      "contents": "SIMカード"
+    }
+  ]
+}

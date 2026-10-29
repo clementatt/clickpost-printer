@@ -15,6 +15,8 @@
 | 能力 | 状态 |
 |---|---|
 | 自动定位 A4 页里的 A6 运单区域（识别裁切线 / 标签外框） | ✅ 已实现，样本实测 97.3 × 139.8 mm |
+| **一张 A4 上 4 面（まとめ申込 2×2）自动拆分、逐张打印** | ✅ `--labels all` |
+| **まとめ申込 批量 CSV（Shift-JIS）生成与校验** | ✅ `dzpost csv` |
 | 缩放到 76 × 130 mm @ 300 dpi，居中到 960 点打印头 | ✅ |
 | 1-bit 阈值化 + 命令流编码（`1f 2a` / `1f 2b` / `1f 2e` / `0c`） | ✅ 含逐字节解码自校验 |
 | BLE 打印（免 root，约 4.9 KB/s） | ✅ 传输层沿用已验真的实现 |
@@ -51,6 +53,45 @@ sudo .venv/bin/dzpost print ~/Downloads/628836654423.pdf --transport usb
 ```
 
 `dzpost scan` 可列出附近的 BLE 设备，确认打印机是否在线。
+
+### 一张 PDF 有 4 面（まとめ申込）
+
+ClickPost 的「まとめ申込」出来的 A4 是 **2 × 2 四张 A6**，中间有贯通的裁切线。
+工具会按裁切线把纸切成网格，逐个格子判断"这块是不是真标签"（有外框、有内容才
+算），空白格自动丢弃，然后按**从上到下、从左到右**的顺序编号：
+
+```bash
+dzpost info   batch4.pdf                 # 打印 "detected 4 label(s)"
+dzpost print  batch4.pdf --labels all    # 四张连续打，每张之间等 2 秒
+dzpost print  batch4.pdf --index 2       # 只打第 3 张（调试用）
+dzpost print  batch4.pdf --labels all --dry-run out/batch.bin  # → batch-1..4.bin
+```
+
+批量打印时每张都会先查状态、打完再等空闲，状态不是 `00` 就整批返回非 0。
+
+## 批量发货 CSV（まとめ申込 / Amazon 版）
+
+官方格式（`create_csv_manual_amazon.pdf`）：8 列、Shift-JIS、一次最多 40 行。
+
+```bash
+# 1) 编辑 batch/orders.json（UTF-8，好改）
+# 2) 生成 Shift-JIS 的 CSV
+dzpost csv build batch/orders.json -o batch/clickpost-4件.csv
+# 3) 上传前再验一遍（桁数 / 敬称 / 文字幅 / Shift-JIS / 40 行上限）
+dzpost csv validate batch/clickpost-4件.csv
+```
+
+| 列 | 項目 | 規則 |
+|---|---|---|
+| A | お届け先郵便番号 | 必須，半角7桁（或 `123-4567`）|
+| B | お届け先氏名 | 必須，**不含敬称**，全角20 / 半角40 以内 |
+| C | お届け先敬称 | `様` 或 `御中` |
+| D–G | お届け先住所1–4行目 | 至少一行，每行 全角20 / 半角40 |
+| H | 内容品 | 必須，全角15 / 半角30 |
+
+`dzpost csv build` 会拒绝不合规的行（打印具体哪一行哪一列），不会写出半成品。
+样本见 [`batch/`](batch/)：4 行都是同一个收件人；4 件同址可直接用，不同址就改
+`orders.json` 再重新生成。
 
 ## 它是怎么裁的
 
@@ -104,8 +145,9 @@ sudo .venv/bin/dzpost print ~/Downloads/628836654423.pdf --transport usb
 python -m unittest discover -s tests -v
 ```
 
-35 个用例，覆盖：命令流编码/解码往返（逐个点比对）、重复行与前导空白压缩、
-裁切线/外框识别、版式合成与偏移、CLI 全流程（`--dry-run` 不碰硬件）。
+58 个用例，覆盖：命令流编码/解码往返（逐个点比对）、重复行与前导空白压缩、
+裁切线/外框识别、**4-up 网格拆分**、版式合成与偏移、**CSV 规则校验与 Shift-JIS
+往返**、CLI 全流程（`--dry-run` 不碰硬件）。
 
 `dzpost verify` 用独立解码器把命令流还原成点阵统计，可以作为打印前的最后一道闸。
 
@@ -116,7 +158,9 @@ USB 走 HID 中断接口（`1e` = Report ID），BLE 去掉 `1e` 走串口透传
 
 ## 路线图
 
-- [ ] 批量：一次吃多个 PDF / 目录，循环打印并报告每张状态
+- [ ] 批量：一次吃多个 PDF / 目录（现在已支持单个 PDF 内 4 面）
+- [x] 一张 A4 内 4 面自动拆分（`--labels all`）
+- [x] まとめ申込 CSV 生成 / 校验（`dzpost csv`）
 - [ ] 底部留白区域加可选页脚（订单号 / 备注），不改运单本体
 - [ ] 条码区域按原生分辨率重绘（Code128），进一步保证扫描率
 - [ ] Linux udev 规则与 udev 免 root 说明
