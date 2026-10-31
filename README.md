@@ -123,5 +123,10 @@ CI（GitHub Actions）は両方のテストと `npm run build` を回します�
 
 ## ライセンス
 
-MIT。コマンド列エンコーダは [dz-print](https://github.com/sb-child/dz-print)（MIT）の
-実装を参照しています。
+本プロジェクトは **MIT** です。ただしコマンド列エンコーダ
+（`src/dzpost/protocol.py` / `web/src/protocol.ts`）は
+[dz-print](https://github.com/sb-child/dz-print)（**MPL-2.0**）の派生物なので、
+この 2 ファイルだけ **MPL-2.0** が適用されます（ファイル単位のコピーレフト）。
+
+- `LICENSE` — MIT（上記 2 ファイル以外）
+- MPL-2.0 の全文 — <https://mozilla.org/MPL/2.0/>
