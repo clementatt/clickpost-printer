@@ -1,7 +1,7 @@
 # 协议速查
 
 来源：DeTong DP305P（`3533:5C32`，序列号 `DP305P-Y60870279`）真机逆向，
-以及 `dz-print`（MIT）的参考实现。完整逆向记录见原工作区
+以及 `dz-print`（**MPL-2.0**）的参考实现。完整逆向记录见原工作区
 `DeTong/REPORT.md`、`DeTong/analysis/ble.md`、`DeTong/dz-print/protocol.md`。
 
 ## 命令帧（USB / BLE 相同）

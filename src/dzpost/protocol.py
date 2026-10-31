@@ -1,8 +1,16 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+#
+# Derived from dz-print <https://github.com/sb-child/dz-print> (MPL-2.0),
+# notably src/image_proc/cmd_parser.rs and src/command/.  Only this file is
+# under MPL-2.0; the rest of this project stays MIT.
+
 """DeTong DP-series label printer command stream.
 
 Everything here was reverse-engineered against a DeTong DP305P
 (``3533:5C32``, 300 dpi, 960-dot head) and is byte-compatible with the
-reference implementation in ``dz-print`` (MIT).
+reference implementation in ``dz-print`` (MPL-2.0).
 
 Two layers of framing exist on the wire:
 
