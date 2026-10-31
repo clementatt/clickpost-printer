@@ -114,4 +114,9 @@ CI（GitHub Actions）会跑两边的测试和构建。
 
 ## 许可
 
-MIT。命令流编码参考了 [dz-print](https://github.com/sb-child/dz-print)（MIT）。
+本项目整体为 **MIT**。但命令流编码器（`src/dzpost/protocol.py` / `web/src/protocol.ts`）
+是 [dz-print](https://github.com/sb-child/dz-print)（**MPL-2.0**）的衍生作品，
+这两个文件单独适用 **MPL-2.0**（文件级 copyleft）。
+
+- `LICENSE` — MIT（上述两个文件之外）
+- MPL-2.0 全文 — <https://mozilla.org/MPL/2.0/>
